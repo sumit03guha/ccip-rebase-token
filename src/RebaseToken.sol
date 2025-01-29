@@ -3,12 +3,14 @@
 pragma solidity 0.8.28;
 
 import { Ownable } from "@openzeppelin/contracts/access/Ownable.sol";
+import { AccessControl } from "@openzeppelin/contracts/access/AccessControl.sol";
 import { ERC20 } from "@openzeppelin/contracts/token/ERC20/ERC20.sol";
 
-import { PRECISION_FACTOR } from "./Constants.sol";
+import { PRECISION_FACTOR, MINTER_AND_BURNER_ROLE } from "./Constants.sol";
 import { RebaseToken__NewInterestRateCannotBeGreaterThanPrevious } from "./Errors.sol";
+import { InterestRateSet } from "./Events.sol";
 
-contract RebaseToken is Ownable, ERC20 {
+contract RebaseToken is AccessControl, Ownable, ERC20 {
     mapping(address => uint256) private _userInterestRate;
     mapping(address => uint256) private _userLastUpdatedTimestamp;
 
@@ -25,20 +27,68 @@ contract RebaseToken is Ownable, ERC20 {
             );
         }
         _interestRate = newInterestRate;
+
+        emit InterestRateSet(newInterestRate);
     }
 
-    function mint(address account, uint256 value) external {
+    function grantMinterAndBurnerRole(address account) external onlyOwner {
+        _grantRole(MINTER_AND_BURNER_ROLE, account);
+    }
+
+    function mint(address account, uint256 value) external onlyRole(MINTER_AND_BURNER_ROLE) {
         _mintAccruedInterest(account);
         _userInterestRate[account] = _interestRate;
         _mint(account, value);
     }
 
-    function burn(address _from, uint256 _amount) external {
+    function burn(address _from, uint256 _amount) external onlyRole(MINTER_AND_BURNER_ROLE) {
         if (_amount == type(uint256).max) {
             _amount = balanceOf(_from);
         }
         _mintAccruedInterest(_from);
         _burn(_from, _amount);
+    }
+
+    function transfer(address to, uint256 value) public override returns (bool) {
+        _mintAccruedInterest(msg.sender);
+        _mintAccruedInterest(to);
+
+        if (value == type(uint256).max) {
+            value = balanceOf(msg.sender);
+        }
+
+        if (balanceOf(to) == 0) {
+            _userInterestRate[to] = _userInterestRate[msg.sender];
+        }
+
+        return super.transfer(to, value);
+    }
+
+    function transferFrom(address from, address to, uint256 value) public override returns (bool) {
+        _mintAccruedInterest(from);
+        _mintAccruedInterest(to);
+
+        if (value == type(uint256).max) {
+            value = balanceOf(from);
+        }
+
+        if (balanceOf(to) == 0) {
+            _userInterestRate[to] = _userInterestRate[from];
+        }
+
+        return super.transferFrom(from, to, value);
+    }
+
+    function principalBalance(address _account) public view returns (uint256) {
+        return super.balanceOf(_account);
+    }
+
+    function getInterestRate() public view returns (uint256) {
+        return _interestRate;
+    }
+
+    function getUserInterestRate(address _user) public view returns (uint256) {
+        return _userInterestRate[_user];
     }
 
     function balanceOf(address account) public view override returns (uint256) {
