@@ -44,7 +44,7 @@ optimizer = true
 # The number of optimizer runs
 optimizer_runs = 200
 # The verbosity of tests
-verbosity = 4
+verbosity = 1
 # A list of ignored solc error codes
 ignored_error_codes = [1878, 5574]
 # Whether contract build warnings will cause compilation to fail
@@ -153,7 +153,7 @@ number_underscore = "preserve"
 
 [fuzz]
 # The number of fuzz runs for fuzz tests
-runs = 256
+runs = 100000
 # The maximum number of test case rejections allowed by proptest, to be
 # encountered during usage of `vm.assume` cheatcode. This will be used
 # to set the `max_global_rejects` value in proptest test runner config.
