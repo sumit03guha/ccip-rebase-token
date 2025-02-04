@@ -16,7 +16,8 @@ contract Vault {
     receive() external payable { }
 
     function deposit() external payable {
-        _rebaseToken.mint(msg.sender, msg.value);
+        uint256 interestRate = _rebaseToken.getInterestRate();
+        _rebaseToken.mint(msg.sender, msg.value, interestRate);
 
         emit Deposit(msg.sender, msg.value);
     }
