@@ -3,9 +3,9 @@
 pragma solidity 0.8.28;
 
 import { IERC20 } from
-    "@chainlink/vendor/openzeppelin-solidity/v4.8.3/contracts/token/ERC20/IERC20.sol";
-import { Pool } from "@chainlink/ccip/libraries/Pool.sol";
-import { TokenPool } from "@chainlink/ccip/pools/TokenPool.sol";
+    "@chainlink-contracts/vendor/openzeppelin-solidity/v4.8.3/contracts/token/ERC20/IERC20.sol";
+import { Pool } from "@chainlink-contracts/ccip/libraries/Pool.sol";
+import { TokenPool } from "@chainlink-contracts/ccip/pools/TokenPool.sol";
 
 import { IRebaseToken } from "./interfaces/IRebaseToken.sol";
 
@@ -21,7 +21,6 @@ contract RebaseTokenPool is TokenPool {
         _validateLockOrBurn(lockOrBurnIn);
         IRebaseToken(lockOrBurnIn.localToken).burn(address(this), lockOrBurnIn.amount);
 
-        // address receiver = abi.decode(lockOrBurnIn.receiver, (address));
         uint256 userInterestRate =
             IRebaseToken(lockOrBurnIn.localToken).getUserInterestRate(lockOrBurnIn.originalSender);
 
