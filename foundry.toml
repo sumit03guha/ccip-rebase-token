@@ -18,7 +18,7 @@ libraries = []
 # Whether to cache builds or not
 cache = true
 # The cache directory if enabled
-cache_path  = 'build/foundry/forge-cache'
+cache_path = 'build/foundry/forge-cache'
 # Where the broadcast logs are stored
 broadcast = 'broadcast'
 # additional solc allow paths
@@ -104,7 +104,7 @@ revert_strings = "default"
 # for `forge test`, but is experimental.
 sparse_mode = false
 # Contains alias -> URL|Env pairs for RPC endpoints that can be accessed during testing
-rpc_endpoints = { optimism = "https://optimism.alchemyapi.io/v2/...", mainnet = "${RPC_MAINNET}" }
+rpc_endpoints = { arb_sepolia = "https://endpoints.omniatech.io/v1/arbitrum/sepolia/public", sepolia = "https://ethereum-sepolia-rpc.publicnode.com" }
 # The Solc instance to use if any.
 # This takes precedence over `auto_detect_solc`, if a version is set then this overrides auto-detection.
 #solc = None
