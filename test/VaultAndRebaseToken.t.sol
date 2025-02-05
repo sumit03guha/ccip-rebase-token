@@ -4,9 +4,9 @@ pragma solidity 0.8.28;
 
 import { Test, console2 } from "forge-std/Test.sol";
 
-import { Vault } from "../src/Vault.sol";
 import { IRebaseToken } from "../src/interfaces/IRebaseToken.sol";
 import { RebaseToken } from "../src/RebaseToken.sol";
+import { Vault } from "../src/Vault.sol";
 import { Deposit, Redeem, InterestRateSet } from "../src/Events.sol";
 import { RebaseToken__NewInterestRateCannotBeGreaterThanPrevious } from "../src/Errors.sol";
 
