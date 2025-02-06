@@ -13,12 +13,15 @@ import { RegistryModuleOwnerCustom } from
     "@chainlink-contracts/ccip/tokenAdminRegistry/RegistryModuleOwnerCustom.sol";
 import { TokenAdminRegistry } from
     "@chainlink-contracts/ccip/tokenAdminRegistry/TokenAdminRegistry.sol";
+import { TokenPool } from "@chainlink-contracts/ccip/pools/TokenPool.sol";
+import { RateLimiter } from "@chainlink-contracts/ccip/libraries/RateLimiter.sol";
 
 import { IRebaseToken } from "../src/interfaces/IRebaseToken.sol";
 import { RebaseToken } from "../src/RebaseToken.sol";
 import { Vault } from "../src/Vault.sol";
 import { RebaseTokenPool } from "../src/RebaseTokenPool.sol";
 import { Deposit, Redeem, InterestRateSet } from "../src/Events.sol";
+import { INTEREST_RATE } from "../src/Constants.sol";
 
 contract CrossChainTest is Test {
     RebaseToken sepoliaToken;
@@ -47,7 +50,7 @@ contract CrossChainTest is Test {
         vm.makePersistent(address(ccipLocalSimulatorFork));
 
         vm.startPrank(owner);
-        sepoliaToken = new RebaseToken();
+        sepoliaToken = new RebaseToken(INTEREST_RATE);
 
         sepoliaNetworkDetails = ccipLocalSimulatorFork.getNetworkDetails(block.chainid);
 
@@ -59,25 +62,27 @@ contract CrossChainTest is Test {
         );
 
         vault = new Vault(IRebaseToken(address(sepoliaToken)));
-
-        sepoliaToken.grantMinterAndBurnerRole(address(sepoliaTokenPool));
         sepoliaToken.grantMinterAndBurnerRole(address(vault));
 
-        RegistryModuleOwnerCustom(sepoliaNetworkDetails.registryModuleOwnerCustomAddress)
-            .registerAdminViaOwner(address(sepoliaToken));
-        TokenAdminRegistry(sepoliaNetworkDetails.tokenAdminRegistryAddress).acceptAdminRole(
-            address(sepoliaToken)
-        );
-        TokenAdminRegistry(sepoliaNetworkDetails.tokenAdminRegistryAddress).setPool(
-            address(sepoliaToken), address(sepoliaTokenPool)
-        );
+        _setupRoles(address(sepoliaToken), address(sepoliaTokenPool), sepoliaNetworkDetails);
+
+        // sepoliaToken.grantMinterAndBurnerRole(address(sepoliaTokenPool));
+
+        // RegistryModuleOwnerCustom(sepoliaNetworkDetails.registryModuleOwnerCustomAddress)
+        //     .registerAdminViaOwner(address(sepoliaToken));
+        // TokenAdminRegistry(sepoliaNetworkDetails.tokenAdminRegistryAddress).acceptAdminRole(
+        //     address(sepoliaToken)
+        // );
+        // TokenAdminRegistry(sepoliaNetworkDetails.tokenAdminRegistryAddress).setPool(
+        //     address(sepoliaToken), address(sepoliaTokenPool)
+        // );
 
         vm.stopPrank();
 
         vm.selectFork(arbSepoliaFork);
 
         vm.startPrank(owner);
-        arbSepoliaToken = new RebaseToken();
+        arbSepoliaToken = new RebaseToken(INTEREST_RATE);
 
         arbSepoliaNetworkDetails = ccipLocalSimulatorFork.getNetworkDetails(block.chainid);
 
@@ -88,17 +93,74 @@ contract CrossChainTest is Test {
             arbSepoliaNetworkDetails.routerAddress
         );
 
-        arbSepoliaToken.grantMinterAndBurnerRole(address(arbSepoliaTokenPool));
+        _setupRoles(
+            address(arbSepoliaToken), address(arbSepoliaTokenPool), arbSepoliaNetworkDetails
+        );
 
-        RegistryModuleOwnerCustom(arbSepoliaNetworkDetails.registryModuleOwnerCustomAddress)
-            .registerAdminViaOwner(address(arbSepoliaToken));
-        TokenAdminRegistry(arbSepoliaNetworkDetails.tokenAdminRegistryAddress).acceptAdminRole(
+        // arbSepoliaToken.grantMinterAndBurnerRole(address(arbSepoliaTokenPool));
+
+        // RegistryModuleOwnerCustom(arbSepoliaNetworkDetails.registryModuleOwnerCustomAddress)
+        //     .registerAdminViaOwner(address(arbSepoliaToken));
+        // TokenAdminRegistry(arbSepoliaNetworkDetails.tokenAdminRegistryAddress).acceptAdminRole(
+        //     address(arbSepoliaToken)
+        // );
+        // TokenAdminRegistry(sepoliaNetworkDetails.tokenAdminRegistryAddress).setPool(
+        //     address(arbSepoliaToken), address(arbSepoliaTokenPool)
+        // );
+        vm.stopPrank();
+
+        _applyChainUpdates(
+            sepoliaFork,
+            address(sepoliaTokenPool),
+            sepoliaNetworkDetails.chainSelector,
+            address(arbSepoliaTokenPool),
             address(arbSepoliaToken)
         );
-        TokenAdminRegistry(sepoliaNetworkDetails.tokenAdminRegistryAddress).setPool(
-            address(arbSepoliaToken), address(arbSepoliaTokenPool)
+        _applyChainUpdates(
+            arbSepoliaFork,
+            address(arbSepoliaTokenPool),
+            arbSepoliaNetworkDetails.chainSelector,
+            address(sepoliaTokenPool),
+            address(sepoliaToken)
         );
+    }
 
-        vm.stopPrank();
+    function _setupRoles(
+        address token,
+        address tokenPool,
+        Register.NetworkDetails memory networkDetails
+    ) private {
+        RebaseToken(token).grantMinterAndBurnerRole(tokenPool);
+
+        RegistryModuleOwnerCustom(networkDetails.registryModuleOwnerCustomAddress)
+            .registerAdminViaOwner(token);
+        TokenAdminRegistry(networkDetails.tokenAdminRegistryAddress).acceptAdminRole(token);
+        TokenAdminRegistry(networkDetails.tokenAdminRegistryAddress).setPool(token, tokenPool);
+    }
+
+    function _applyChainUpdates(
+        uint256 fork,
+        address tokenPool,
+        uint64 remoteChainSelector,
+        address remotePoolAddress,
+        address remoteTokenAddress
+    ) private {
+        vm.selectFork(fork);
+
+        bytes[] memory remotePoolAddresses = new bytes[](1);
+        remotePoolAddresses[0] = abi.encode(remotePoolAddress);
+
+        TokenPool.ChainUpdate[] memory chainsToAdd = new TokenPool.ChainUpdate[](1);
+
+        chainsToAdd[0] = TokenPool.ChainUpdate({
+            remoteChainSelector: remoteChainSelector,
+            remotePoolAddresses: remotePoolAddresses,
+            remoteTokenAddress: abi.encode(remoteTokenAddress),
+            outboundRateLimiterConfig: RateLimiter.Config({ isEnabled: false, capacity: 0, rate: 0 }),
+            inboundRateLimiterConfig: RateLimiter.Config({ isEnabled: false, capacity: 0, rate: 0 })
+        });
+
+        vm.prank(owner);
+        RebaseTokenPool(tokenPool).applyChainUpdates(new uint64[](0), chainsToAdd);
     }
 }
