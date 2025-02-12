@@ -64,7 +64,7 @@ tx_origin = '0x1804c8AB1F12E6bbf3894d4083f33e07309d1f38'
 # The initial balance of the test contract
 initial_balance = '0xffffffffffffffffffffffff'
 # The chain ID we are on in tests
-chain_id = 31337
+# chain_id = 31337
 # The `block.number` value during EVM execution
 block_number = 1
 # The gas limit in tests
@@ -104,7 +104,7 @@ revert_strings = "default"
 # for `forge test`, but is experimental.
 sparse_mode = false
 # Contains alias -> URL|Env pairs for RPC endpoints that can be accessed during testing
-rpc_endpoints = { arb_sepolia = "https://endpoints.omniatech.io/v1/arbitrum/sepolia/public", sepolia = "https://ethereum-sepolia-rpc.publicnode.com" }
+rpc_endpoints = { arb-sepolia = "https://endpoints.omniatech.io/v1/arbitrum/sepolia/public", sepolia = "https://ethereum-sepolia-rpc.publicnode.com" }
 # The Solc instance to use if any.
 # This takes precedence over `auto_detect_solc`, if a version is set then this overrides auto-detection.
 #solc = None
