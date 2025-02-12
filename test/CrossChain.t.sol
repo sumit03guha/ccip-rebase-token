@@ -9,12 +9,14 @@ import { Register } from "@chainlink-local/src/ccip/Register.sol";
 
 import { IERC20 } from
     "@chainlink-contracts/vendor/openzeppelin-solidity/v4.8.3/contracts/token/ERC20/IERC20.sol";
+import { IRouterClient } from "@chainlink-contracts/ccip/interfaces/IRouterClient.sol";
 import { RegistryModuleOwnerCustom } from
     "@chainlink-contracts/ccip/tokenAdminRegistry/RegistryModuleOwnerCustom.sol";
 import { TokenAdminRegistry } from
     "@chainlink-contracts/ccip/tokenAdminRegistry/TokenAdminRegistry.sol";
 import { TokenPool } from "@chainlink-contracts/ccip/pools/TokenPool.sol";
 import { RateLimiter } from "@chainlink-contracts/ccip/libraries/RateLimiter.sol";
+import { Client } from "@chainlink-contracts/ccip/libraries/Client.sol";
 
 import { IRebaseToken } from "../src/interfaces/IRebaseToken.sol";
 import { RebaseToken } from "../src/RebaseToken.sol";
@@ -36,6 +38,8 @@ contract CrossChainTest is Test {
     uint256 arbSepoliaFork;
 
     address owner = makeAddr("owner");
+    address user = makeAddr("user");
+    address recevier = makeAddr("receiver");
 
     CCIPLocalSimulatorFork ccipLocalSimulatorFork;
 
@@ -66,17 +70,6 @@ contract CrossChainTest is Test {
 
         _setupRoles(address(sepoliaToken), address(sepoliaTokenPool), sepoliaNetworkDetails);
 
-        // sepoliaToken.grantMinterAndBurnerRole(address(sepoliaTokenPool));
-
-        // RegistryModuleOwnerCustom(sepoliaNetworkDetails.registryModuleOwnerCustomAddress)
-        //     .registerAdminViaOwner(address(sepoliaToken));
-        // TokenAdminRegistry(sepoliaNetworkDetails.tokenAdminRegistryAddress).acceptAdminRole(
-        //     address(sepoliaToken)
-        // );
-        // TokenAdminRegistry(sepoliaNetworkDetails.tokenAdminRegistryAddress).setPool(
-        //     address(sepoliaToken), address(sepoliaTokenPool)
-        // );
-
         vm.stopPrank();
 
         vm.selectFork(arbSepoliaFork);
@@ -87,7 +80,7 @@ contract CrossChainTest is Test {
         arbSepoliaNetworkDetails = ccipLocalSimulatorFork.getNetworkDetails(block.chainid);
 
         arbSepoliaTokenPool = new RebaseTokenPool(
-            IERC20(address(sepoliaToken)),
+            IERC20(address(arbSepoliaToken)),
             new address[](0),
             arbSepoliaNetworkDetails.rmnProxyAddress,
             arbSepoliaNetworkDetails.routerAddress
@@ -97,31 +90,41 @@ contract CrossChainTest is Test {
             address(arbSepoliaToken), address(arbSepoliaTokenPool), arbSepoliaNetworkDetails
         );
 
-        // arbSepoliaToken.grantMinterAndBurnerRole(address(arbSepoliaTokenPool));
-
-        // RegistryModuleOwnerCustom(arbSepoliaNetworkDetails.registryModuleOwnerCustomAddress)
-        //     .registerAdminViaOwner(address(arbSepoliaToken));
-        // TokenAdminRegistry(arbSepoliaNetworkDetails.tokenAdminRegistryAddress).acceptAdminRole(
-        //     address(arbSepoliaToken)
-        // );
-        // TokenAdminRegistry(sepoliaNetworkDetails.tokenAdminRegistryAddress).setPool(
-        //     address(arbSepoliaToken), address(arbSepoliaTokenPool)
-        // );
         vm.stopPrank();
 
         _applyChainUpdates(
             sepoliaFork,
             address(sepoliaTokenPool),
-            sepoliaNetworkDetails.chainSelector,
+            arbSepoliaNetworkDetails.chainSelector,
             address(arbSepoliaTokenPool),
             address(arbSepoliaToken)
         );
         _applyChainUpdates(
             arbSepoliaFork,
             address(arbSepoliaTokenPool),
-            arbSepoliaNetworkDetails.chainSelector,
+            sepoliaNetworkDetails.chainSelector,
             address(sepoliaTokenPool),
             address(sepoliaToken)
+        );
+    }
+
+    function testCrossChain() external {
+        vm.selectFork(sepoliaFork);
+        vm.deal(user, 100 ether);
+
+        vm.prank(user);
+        vault.deposit{ value: 20 ether }();
+
+        _bridgeTokens(
+            sepoliaFork,
+            arbSepoliaFork,
+            address(sepoliaToken),
+            address(arbSepoliaToken),
+            user,
+            recevier,
+            10 ether,
+            sepoliaNetworkDetails,
+            arbSepoliaNetworkDetails
         );
     }
 
@@ -162,5 +165,90 @@ contract CrossChainTest is Test {
 
         vm.prank(owner);
         RebaseTokenPool(tokenPool).applyChainUpdates(new uint64[](0), chainsToAdd);
+    }
+
+    function _bridgeTokens(
+        uint256 localFork,
+        uint256 remoteFork,
+        address localToken,
+        address remoteToken,
+        address sender,
+        address receiver,
+        uint256 amountToBridge,
+        Register.NetworkDetails memory localNetworkDetails,
+        Register.NetworkDetails memory remoteNetworkDetails
+    ) private {
+        vm.selectFork(localFork);
+
+        Client.EVM2AnyMessage memory evm2AnyMessage =
+            _buildCCIPMessage(receiver, localToken, amountToBridge, localNetworkDetails.linkAddress);
+
+        uint256 fees = IRouterClient(localNetworkDetails.routerAddress).getFee(
+            remoteNetworkDetails.chainSelector, evm2AnyMessage
+        );
+        bool success = ccipLocalSimulatorFork.requestLinkFromFaucet(sender, fees);
+        assert(success);
+
+        vm.startPrank(sender);
+
+        IERC20(localToken).approve(localNetworkDetails.routerAddress, amountToBridge);
+        IERC20(localNetworkDetails.linkAddress).approve(
+            localNetworkDetails.routerAddress, amountToBridge
+        );
+
+        vm.stopPrank();
+
+        uint256 localTokenBalanceBefore = IERC20(localToken).balanceOf(sender);
+        vm.prank(sender);
+        bytes32 messageId = IRouterClient(localNetworkDetails.routerAddress).ccipSend(
+            remoteNetworkDetails.chainSelector, evm2AnyMessage
+        );
+        uint256 localTokenBalanceAfter = IERC20(localToken).balanceOf(sender);
+
+        assertEq(localTokenBalanceBefore - localTokenBalanceAfter, amountToBridge);
+
+        vm.stopPrank();
+
+        uint256 localInterestRate = IRebaseToken(localToken).getInterestRate();
+
+        vm.selectFork(remoteFork);
+        vm.warp(block.timestamp + 20 minutes);
+
+        uint256 remoteBalanceBefore = IERC20(remoteToken).balanceOf(receiver);
+        ccipLocalSimulatorFork.switchChainAndRouteMessage(remoteFork);
+        uint256 remoteInterestRate = IRebaseToken(remoteToken).getInterestRate();
+        uint256 remoteBalanceAfter = IERC20(remoteToken).balanceOf(receiver);
+
+        assertEq(remoteBalanceAfter - remoteBalanceBefore, amountToBridge);
+        assertEq(localInterestRate, remoteInterestRate);
+    }
+
+    function _buildCCIPMessage(
+        address _receiver,
+        address _token,
+        uint256 _amount,
+        address _feeTokenAddress
+    ) private pure returns (Client.EVM2AnyMessage memory) {
+        // Set the token amounts
+        Client.EVMTokenAmount[] memory tokenAmounts = new Client.EVMTokenAmount[](1);
+        tokenAmounts[0] = Client.EVMTokenAmount({ token: _token, amount: _amount });
+
+        // Create an EVM2AnyMessage struct in memory with necessary information for sending a cross-chain message
+        return Client.EVM2AnyMessage({
+            receiver: abi.encode(_receiver), // ABI-encoded receiver address
+            data: "", // No data
+            tokenAmounts: tokenAmounts, // The amount and type of token being transferred
+            extraArgs: Client._argsToBytes(
+                // Additional arguments, setting gas limit and allowing out-of-order execution.
+                // Best Practice: For simplicity, the values are hardcoded. It is advisable to use a more dynamic approach
+                // where you set the extra arguments off-chain. This allows adaptation depending on the lanes, messages,
+                // and ensures compatibility with future CCIP upgrades. Read more about it here: https://docs.chain.link/ccip/best-practices#using-extraargs
+                Client.EVMExtraArgsV1({
+                    gasLimit: 1_000_000 // Gas limit for the callback on the destination chain
+                 })
+            ),
+            // Set the feeToken to a feeTokenAddress, indicating specific asset will be used for fees
+            feeToken: _feeTokenAddress
+        });
     }
 }
