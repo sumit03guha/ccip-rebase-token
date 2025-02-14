@@ -133,7 +133,7 @@ contract CrossChainTest is Test {
         address tokenPool,
         Register.NetworkDetails memory networkDetails
     ) private {
-        RebaseToken(token).grantMinterAndBurnerRole(tokenPool);
+        IRebaseToken(token).grantMinterAndBurnerRole(tokenPool);
 
         RegistryModuleOwnerCustom(networkDetails.registryModuleOwnerCustomAddress)
             .registerAdminViaOwner(token);
