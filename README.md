@@ -10,7 +10,6 @@ This project is a self-learning project for developing a cross-chain rebase toke
 - [Installation](#installation)
 - [Testing](#testing)
 - [Deployment](#deployment)
-- [Contributing](#contributing)
 - [License](#license)
 
 ## Overview
@@ -53,7 +52,6 @@ The project is organized as follows:
 - **Automated Rebase Mechanism:** Dynamic supply adjustments based on economic triggers.
 - **Modular Architecture:** Clean separation of contract logic for token, pool, and vault management.
 - **Foundry Integration:** Rapid development, testing, and deployment with Foundry.
-- **Self-Learning Platform:** An environment to experiment with advanced DeFi concepts and Solidity programming.
 
 ## Installation
 
@@ -108,16 +106,6 @@ forge script script/Deploy.s.sol --broadcast --verify
 
 Ensure your network settings are configured in `foundry.toml`.
 
-## Contributing
-
-Contributions are welcome. Please fork the repository and create a pull request with your proposed changes. For major changes, please open an issue first to discuss what you would like to modify.
-
 ## License
 
 This project is licensed under the MIT License.
-
-## Acknowledgements
-
-- **Chainlink CCIP:** For providing a robust framework for cross-chain communication.
-- **Foundry:** For enabling rapid development and testing through its powerful toolset.
-- **The Blockchain Community:** For continuous inspiration and support.
